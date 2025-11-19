@@ -388,8 +388,42 @@ tk.Label(root, text="CreativeDash.ai Lead Extractor v9", fg="#00FFF7", bg="#000"
 
 # Keyword input
 tk.Label(root, text="Keyword:", fg="white", bg="#000", font=("Courier", 12)).pack()
-keyword_entry = tk.Entry(root, width=60, insertbackground="white", font=("Courier", 12))
-keyword_entry.insert(0, "Enter keyword (e.g., Restaurants in Miami)")
+keyword_entry = tk.Entry(root, width=60, insertbackground="white", font=("Courier", 12), 
+                         bg="#111", fg="gray", selectbackground="#007ACC", selectforeground="white")
+placeholder_text = "Enter keyword (e.g., Restaurants in Miami)"
+keyword_entry.insert(0, placeholder_text)
+
+def on_entry_focus_in(event):
+    current_text = keyword_entry.get()
+    if current_text == placeholder_text:
+        keyword_entry.delete(0, tk.END)
+        keyword_entry.config(fg="white")
+        # Select all so typing replaces it, or position cursor at start
+        keyword_entry.icursor(0)
+    else:
+        # Ensure text is visible even if not placeholder
+        keyword_entry.config(fg="white")
+
+def on_entry_focus_out(event):
+    current_text = keyword_entry.get()
+    if current_text.strip() == "":
+        keyword_entry.delete(0, tk.END)
+        keyword_entry.insert(0, placeholder_text)
+        keyword_entry.config(fg="gray")
+
+def on_entry_key(event):
+    # If placeholder is still there when user types, clear it first
+    current_text = keyword_entry.get()
+    if current_text == placeholder_text:
+        keyword_entry.delete(0, tk.END)
+    # Always ensure text color is white when typing
+    keyword_entry.config(fg="white")
+    # Don't prevent the key from being processed
+    return None
+
+keyword_entry.bind("<FocusIn>", on_entry_focus_in)
+keyword_entry.bind("<FocusOut>", on_entry_focus_out)
+keyword_entry.bind("<Key>", on_entry_key)
 keyword_entry.pack(pady=5)
 
 # Max results
@@ -415,12 +449,20 @@ tk.Checkbutton(root, text="XLSX", variable=xlsx_var, fg="white", bg="#000", sele
 tk.Checkbutton(root, text="JSON", variable=json_var, fg="white", bg="#000", selectcolor="#111").pack()
 
 # Buttons
+def start_scraper():
+    keyword = keyword_entry.get().strip()
+    # Ignore placeholder text
+    if keyword == placeholder_text or keyword == "":
+        messagebox.showwarning("Invalid Input", "Please enter a search keyword.")
+        return
+    threading.Thread(target=run_scraper, args=(
+        keyword, int(results_spinbox.get()), bing_var.get(), duck_var.get(),
+        strict_var.get(), csv_var.get(), xlsx_var.get(), json_var.get(),
+        progress_var, log_box, output_label)).start()
+
 button_frame = tk.Frame(root, bg="#000")
 button_frame.pack(pady=15)
-start_btn = tk.Button(button_frame, text="START SCRAPER", command=lambda: threading.Thread(target=run_scraper, args=(
-    keyword_entry.get().strip(), int(results_spinbox.get()), bing_var.get(), duck_var.get(),
-    strict_var.get(), csv_var.get(), xlsx_var.get(), json_var.get(),
-    progress_var, log_box, output_label)).start(),
+start_btn = tk.Button(button_frame, text="START SCRAPER", command=start_scraper,
     bg="#007ACC", fg="white", width=20, font=("Courier", 12))
 start_btn.grid(row=0, column=0, padx=10)
 
