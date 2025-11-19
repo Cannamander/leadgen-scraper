@@ -27,7 +27,14 @@ BLOCKLIST = [
     "wordpress", "themeforest", "wix.com", "template"
 ]
 
-AGGREGATOR_DOMAINS = ["restaurantguru", "catchdesmoines", "tripadvisor", "yelp", "opentable"]
+AGGREGATOR_DOMAINS = [
+    "restaurantguru", "catchdesmoines", "tripadvisor", "yelp", "opentable",
+    "zomato", "foursquare", "yellowpages", "superpages", "whitepages",
+    "manta", "bbb.org", "angieslist", "homeadvisor", "thumbtack",
+    "nextdoor", "facebook.com", "google.com/maps", "maps.google",
+    "grubhub", "ubereats", "doordash", "seamless", "allmenus",
+    "menupages", "urbanspoon", "zagat", "opentable.com"
+]
 EMAIL_BLACKLIST = ["font", "template", "theme", "demo", "sample"]
 JUNK_NAME_WORDS = ["Menu", "Reservation", "Homepage", "Home", "Order Online"]
 
@@ -63,7 +70,13 @@ def unique_key(url):
 def is_junk_domain(url):
     return any(blocked in url for blocked in BLOCKLIST)
 
+def is_aggregator_domain(url):
+    """Check if URL is from an aggregator domain - should be filtered out completely"""
+    domain = domain_from_url(url).lower()
+    return any(agg_domain in domain for agg_domain in AGGREGATOR_DOMAINS)
+
 def is_aggregator_page(url, title):
+    """Check if a page is an aggregator listing page (for extracting sub-links)"""
     if any(domain in url for domain in AGGREGATOR_DOMAINS):
         return True
     if title and any(word in title.lower() for word in ["top", "best", "guide", "restaurants near", "list", "directory"]):
@@ -193,11 +206,16 @@ def search_duck(query, max_results):
 def crawl_url(url, keyword, raw_results, strict_mode):
     if abort_flag:
         return
+    
+    # Skip aggregator domains entirely - don't even crawl them
+    if is_aggregator_domain(url):
+        return
+    
     name, emails, phones, title, drop_flag = extract_emails_phones_name(url)
     if drop_flag:
         return
 
-    # If aggregator, fetch sub-links and crawl them
+    # If aggregator page detected (by title/content), fetch sub-links and crawl them
     if is_aggregator_page(url, title):
         sub_links = extract_links_from_aggregator(url)
         for sub in sub_links:
@@ -249,8 +267,15 @@ def run_scraper(keyword, max_results, use_bing, use_duck, strict_mode, export_cs
     if use_duck:
         urls += search_duck(keyword, max_results)
 
-    urls = list(set(urls))
-    log_box.insert(tk.END, f"[INFO] Found {len(urls)} URLs. Crawling...\n", "info")
+    # Filter out aggregator domains and junk domains from search results
+    filtered_urls = []
+    for url in urls:
+        if is_aggregator_domain(url) or is_junk_domain(url):
+            continue
+        filtered_urls.append(url)
+    
+    urls = list(set(filtered_urls))
+    log_box.insert(tk.END, f"[INFO] Found {len(urls)} URLs after filtering aggregators. Crawling...\n", "info")
 
     start_time = time.time()
     processed = 0
@@ -271,13 +296,25 @@ def run_scraper(keyword, max_results, use_bing, use_duck, strict_mode, export_cs
     # CLEAN + EXPORT
     cleaned = []
     seen_keys = set()
+    seen_domains = set()  # Track domains to ensure one entry per domain
     for r in raw_results:
         key = unique_key(r["Website"])
-        if is_junk_domain(key):
+        domain = domain_from_url(r["Website"]).lower()
+        
+        # Skip junk/aggregator domains
+        if is_junk_domain(key) or is_aggregator_domain(key):
             continue
+        
+        # Skip if we've already seen this exact URL
         if key in seen_keys:
             continue
+        
+        # Skip if we've already seen this domain (one entry per domain)
+        if domain in seen_domains:
+            continue
+        
         seen_keys.add(key)
+        seen_domains.add(domain)
         cleaned.append(r)
 
     duration = round(time.time() - start_time, 2)
